@@ -5,6 +5,7 @@ import threading
 from adc_reader import ADCReader
 from hydraulic_controller import HydraulicController
 from mqtt_client import MQTTClient
+from depth_filter import DepthFilter
 from config_loader import get_config
 
 logging.basicConfig(
@@ -23,6 +24,7 @@ class Gateway:
         self._running = False
         self._report_interval = self.config["report"]["interval_sec"]
         self._hydraulic_states = {}
+        self._depth_filter = DepthFilter(window_size=5, spike_ratio=2.0)
 
     def _handle_command(self, topic, payload):
         parts = topic.split("/")
@@ -85,9 +87,10 @@ class Gateway:
         sensors = self.config["sensors"]
         for sensor in sensors:
             try:
-                depth_mm = self.adc.read_water_depth_mm(
+                raw_mm = self.adc.read_water_depth_mm(
                     sensor["adc_channel"], sensor.get("offset_mm", 0)
                 )
+                depth_mm = self._depth_filter.filter(sensor["sensor_id"], raw_mm)
                 self.mqtt.publish_sensor_data(
                     sensor["underpass_id"], sensor["sensor_id"], depth_mm
                 )

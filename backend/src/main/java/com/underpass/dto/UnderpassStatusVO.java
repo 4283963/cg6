@@ -9,6 +9,7 @@ public class UnderpassStatusVO {
     private Double longitude;
     private Double latitude;
     private Double currentDepthMm;
+    private Double rawDepthMm;
     private String status;
     private Boolean hydraulicLifted;
     private Boolean ledAlarmActive;

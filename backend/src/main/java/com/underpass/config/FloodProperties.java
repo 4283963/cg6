@@ -10,4 +10,6 @@ import org.springframework.stereotype.Component;
 public class FloodProperties {
     private int thresholdMm = 100;
     private int liftHeightCm = 15;
+    private int confirmRounds = 3;
+    private long cooldownSeconds = 60;
 }

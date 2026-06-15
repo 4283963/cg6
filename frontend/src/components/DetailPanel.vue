@@ -12,6 +12,7 @@
       <div class="info-label">当前积水</div>
       <div class="info-value depth" :class="{ danger: (underpass.currentDepthMm || 0) >= 100 }">
         {{ (underpass.currentDepthMm || 0).toFixed(1) }} mm
+        <span class="depth-tag filtered">滤波</span>
         <span class="depth-bar">
           <span
             class="depth-fill"
@@ -19,6 +20,16 @@
             :class="{ danger: (underpass.currentDepthMm || 0) >= 100 }"
           ></span>
         </span>
+      </div>
+
+      <div class="info-label">原始积水</div>
+      <div class="info-value raw-depth">
+        {{ (underpass.rawDepthMm || 0).toFixed(1) }} mm
+        <span class="depth-tag raw">原始</span>
+        <span
+          v-if="underpass.rawDepthMm && underpass.currentDepthMm && Math.abs(underpass.rawDepthMm - underpass.currentDepthMm) > 15"
+          class="spike-warning"
+        >⚠ 毛刺</span>
       </div>
 
       <div class="info-label">状态</div>
@@ -113,6 +124,45 @@ defineEmits(['lift', 'lower'])
 .info-value.depth.danger {
   color: #f53f3f;
   font-weight: 700;
+}
+
+.raw-depth {
+  color: #86909c;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.depth-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+
+.depth-tag.filtered {
+  background: rgba(64, 158, 255, 0.15);
+  color: #409eff;
+  border: 1px solid rgba(64, 158, 255, 0.3);
+}
+
+.depth-tag.raw {
+  background: rgba(134, 144, 156, 0.15);
+  color: #86909c;
+  border: 1px solid rgba(134, 144, 156, 0.3);
+}
+
+.spike-warning {
+  color: #ff7d00;
+  font-size: 11px;
+  font-weight: 600;
+  animation: spike-blink 0.6s infinite;
+}
+
+@keyframes spike-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 
 .depth-bar {

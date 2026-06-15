@@ -24,9 +24,11 @@ public class WaterDepthService {
     private final WaterDepthRecordRepository depthRepo;
     private final UnderpassInfoRepository underpassRepo;
     private final FloodTriggerEngine triggerEngine;
+    private final DepthFilterService depthFilterService;
     private final SimpMessagingTemplate wsTemplate;
 
-    private final Map<String, Double> latestDepthMap = new ConcurrentHashMap<>();
+    private final Map<String, Double> latestRawDepthMap = new ConcurrentHashMap<>();
+    private final Map<String, Double> latestSmoothedDepthMap = new ConcurrentHashMap<>();
 
     public void processSensorData(SensorDataDTO data) {
         WaterDepthRecord record = new WaterDepthRecord();
@@ -36,7 +38,10 @@ public class WaterDepthService {
         record.setTimestampMs(data.getTimestamp());
         depthRepo.save(record);
 
-        latestDepthMap.put(data.getUnderpassId(), data.getDepthMm());
+        double smoothed = depthFilterService.filter(data.getUnderpassId(), data.getDepthMm());
+
+        latestRawDepthMap.put(data.getUnderpassId(), data.getDepthMm());
+        latestSmoothedDepthMap.put(data.getUnderpassId(), smoothed);
 
         triggerEngine.evaluate(data.getUnderpassId(), data.getDepthMm());
 
@@ -44,7 +49,11 @@ public class WaterDepthService {
     }
 
     public Double getLatestDepth(String underpassId) {
-        return latestDepthMap.get(underpassId);
+        return latestSmoothedDepthMap.get(underpassId);
+    }
+
+    public Double getLatestRawDepth(String underpassId) {
+        return latestRawDepthMap.get(underpassId);
     }
 
     public List<WaterDepthRecord> getHistory(String underpassId) {
@@ -62,8 +71,10 @@ public class WaterDepthService {
             vo.setStatus(info.getStatus());
         });
 
-        Double depth = latestDepthMap.get(underpassId);
-        vo.setCurrentDepthMm(depth);
+        Double smoothed = latestSmoothedDepthMap.get(underpassId);
+        Double raw = latestRawDepthMap.get(underpassId);
+        vo.setCurrentDepthMm(smoothed);
+        vo.setRawDepthMm(raw);
         vo.setLastUpdateTime(LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
         return vo;
     }

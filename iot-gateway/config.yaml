@@ -37,6 +37,10 @@ sensors:
 report:
   interval_sec: 5
 
+filter:
+  window_size: 5
+  spike_ratio: 2.0
+
 topics:
   data_publish: "underpass/sensor/data"
   command_subscribe: "underpass/command/+/hydraulic"

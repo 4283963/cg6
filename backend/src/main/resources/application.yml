@@ -28,6 +28,8 @@ mqtt:
 flood:
   threshold-mm: 100
   lift-height-cm: 15
+  confirm-rounds: 3
+  cooldown-seconds: 60
 
 led:
   api-url: http://road-admin.example.com/api/v1/led/control

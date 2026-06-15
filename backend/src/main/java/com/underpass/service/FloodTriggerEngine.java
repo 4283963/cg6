@@ -14,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Set;
@@ -30,27 +31,64 @@ public class FloodTriggerEngine {
     private final UnderpassInfoRepository underpassRepo;
     private final HydraulicActionLogRepository hydraulicLogRepo;
     private final LedControlLogRepository ledLogRepo;
+    private final DepthFilterService depthFilterService;
 
     private final Set<String> alarmedUnderpasses = ConcurrentHashMap.newKeySet();
 
-    public void evaluate(String underpassId, double depthMm) {
-        if (depthMm >= floodProps.getThresholdMm()) {
-            if (!alarmedUnderpasses.contains(underpassId)) {
-                log.warn("!!! UNDERPASS {} water depth {}mm >= threshold {}mm, TRIGGERING ALARM !!!",
-                        underpassId, depthMm, floodProps.getThresholdMm());
-                triggerAlarm(underpassId, depthMm);
+    private final Map<String, LocalDateTime> lastStateChangeTime = new ConcurrentHashMap<>();
+
+    private final Map<String, Integer> aboveThresholdCount = new ConcurrentHashMap<>();
+    private final Map<String, Integer> belowThresholdCount = new ConcurrentHashMap<>();
+
+    public void evaluate(String underpassId, double rawDepthMm) {
+        double smoothedDepth = depthFilterService.filter(underpassId, rawDepthMm);
+
+        if (isInCooldown(underpassId)) {
+            log.debug("Underpass {} in cooldown period, skipping evaluation (raw={}mm, smoothed={}mm)",
+                    underpassId, rawDepthMm, smoothedDepth);
+            return;
+        }
+
+        if (smoothedDepth >= floodProps.getThresholdMm()) {
+            int count = aboveThresholdCount.merge(underpassId, 1, Integer::sum);
+            belowThresholdCount.put(underpassId, 0);
+
+            if (!alarmedUnderpasses.contains(underpassId) && count >= floodProps.getConfirmRounds()) {
+                log.warn("!!! UNDERPASS {} smoothed depth {}mm >= threshold {}mm, confirmed after {} rounds, TRIGGERING ALARM !!!",
+                        underpassId, smoothedDepth, floodProps.getThresholdMm(), count);
+                triggerAlarm(underpassId, smoothedDepth);
+                aboveThresholdCount.put(underpassId, 0);
             }
         } else {
-            if (alarmedUnderpasses.contains(underpassId)) {
-                log.info("Underpass {} water depth {}mm below threshold, clearing alarm",
-                        underpassId, depthMm);
+            int count = belowThresholdCount.merge(underpassId, 1, Integer::sum);
+            aboveThresholdCount.put(underpassId, 0);
+
+            if (alarmedUnderpasses.contains(underpassId) && count >= floodProps.getConfirmRounds()) {
+                log.info("Underpass {} smoothed depth {}mm below threshold, confirmed after {} rounds, clearing alarm",
+                        underpassId, smoothedDepth, count);
                 clearAlarm(underpassId);
+                belowThresholdCount.put(underpassId, 0);
             }
         }
     }
 
+    private boolean isInCooldown(String underpassId) {
+        LocalDateTime lastChange = lastStateChangeTime.get(underpassId);
+        if (lastChange == null) {
+            return false;
+        }
+        Duration elapsed = Duration.between(lastChange, LocalDateTime.now());
+        boolean inCooldown = elapsed.getSeconds() < floodProps.getCooldownSeconds();
+        if (inCooldown) {
+            log.debug("Underpass {} cooldown: {}s remaining",
+                    underpassId, floodProps.getCooldownSeconds() - elapsed.getSeconds());
+        }
+        return inCooldown;
+    }
+
     private void triggerAlarm(String underpassId, double depthMm) {
         alarmedUnderpasses.add(underpassId);
+        lastStateChangeTime.put(underpassId, LocalDateTime.now());
 
         updateUnderpassStatus(underpassId, "ALARM");
 
@@ -63,6 +101,7 @@ public class FloodTriggerEngine {
 
     private void clearAlarm(String underpassId) {
         alarmedUnderpasses.remove(underpassId);
+        lastStateChangeTime.put(underpassId, LocalDateTime.now());
 
         updateUnderpassStatus(underpassId, "NORMAL");
 
@@ -109,7 +148,7 @@ public class FloodTriggerEngine {
             led.setUnderpassId(underpassId);
             led.setLedId(info.getLedId());
             led.setMode("ALARM");
-            led.setDisplayText(floodProps.getThresholdMm() >= 100 ? "积水危险，禁止通行" : "注意积水");
+            led.setDisplayText("积水危险，禁止通行");
             led.setColor("RED");
             ledControlService.sendAlarm(led);
         });
