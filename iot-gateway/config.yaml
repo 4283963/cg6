@@ -1,0 +1,43 @@
+mqtt:
+  broker: "127.0.0.1"
+  port: 1883
+  username: ""
+  password: ""
+  client_id_prefix: "underpass-gateway-"
+  keepalive: 60
+
+adc:
+  spi_bus: 0
+  spi_device: 0
+  channel: 0
+  vref: 3.3
+  sample_rate: 10
+
+hydraulic:
+  gpio_relay_up: 17
+  gpio_relay_down: 27
+  lift_height_cm: 15
+  lift_duration_sec: 8
+  lower_duration_sec: 10
+
+sensors:
+  - sensor_id: "DEPTH-001"
+    underpass_id: "UP-BRIDGE-01"
+    adc_channel: 0
+    offset_mm: 0
+  - sensor_id: "DEPTH-002"
+    underpass_id: "UP-BRIDGE-02"
+    adc_channel: 1
+    offset_mm: 0
+  - sensor_id: "DEPTH-003"
+    underpass_id: "UP-BRIDGE-03"
+    adc_channel: 2
+    offset_mm: 0
+
+report:
+  interval_sec: 5
+
+topics:
+  data_publish: "underpass/sensor/data"
+  command_subscribe: "underpass/command/+/hydraulic"
+  status_publish: "underpass/status/hydraulic"

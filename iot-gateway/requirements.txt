@@ -1,0 +1,4 @@
+paho-mqtt>=1.6.1
+spidev>=3.6
+RPi.GPIO>=0.7.1
+pyyaml>=6.0
