@@ -34,15 +34,19 @@ class Gateway:
             underpass_id = payload.get("underpassId", "unknown")
 
         action = payload.get("action", "").lower()
-        logger.info("Command for %s: action=%s", underpass_id, action)
+        height_cm = payload.get("heightCm")
+        logger.info("Command for %s: action=%s, heightCm=%s", underpass_id, action, height_cm)
 
-        if action == "lift":
+        if action in ("lift", "prelift"):
             current = self._hydraulic_states.get(underpass_id, "lowered")
-            if current == "lifted":
-                logger.info("Underpass %s already lifted, skip", underpass_id)
+            target = "lifted" if action == "lift" else "prelifted"
+            if current == target and height_cm is None:
+                logger.info("Underpass %s already %s, skip", underpass_id, target)
                 return
             threading.Thread(
-                target=self._execute_lift, args=(underpass_id,), daemon=True
+                target=self._execute_lift,
+                args=(underpass_id, action, height_cm),
+                daemon=True
             ).start()
         elif action == "lower":
             threading.Thread(
@@ -51,20 +55,27 @@ class Gateway:
         else:
             logger.warning("Unknown action: %s", action)
 
-    def _execute_lift(self, underpass_id):
+    def _execute_lift(self, underpass_id, action=None, height_cm=None):
         try:
+            target_h = height_cm
+            if target_h is None and action == "prelift":
+                target_h = 5
             self.mqtt.publish_hydraulic_status(
-                underpass_id, "lifting", 0, "in_progress"
+                underpass_id, action or "lifting", target_h or 0, "in_progress"
             )
-            result = self.hydraulic.lift()
-            self._hydraulic_states[underpass_id] = "lifted"
+            result = self.hydraulic.lift(target_h)
+            state_key = "lifted" if result.get("action") == "lift" else "prelifted"
+            self._hydraulic_states[underpass_id] = state_key
             self.mqtt.publish_hydraulic_status(
-                underpass_id, result["action"], result["height_cm"], result["status"]
+                underpass_id,
+                result.get("action", action or "lift"),
+                result.get("height_cm", target_h or 0),
+                result.get("status", "completed")
             )
         except Exception as e:
             logger.error("Lift failed for %s: %s", underpass_id, e)
             self.mqtt.publish_hydraulic_status(
-                underpass_id, "lift", 0, "failed"
+                underpass_id, action or "lift", 0, "failed"
             )
 
     def _execute_lower(self, underpass_id):

@@ -32,7 +32,10 @@
           :underpass="selectedUnderpass"
           @lift="onManualLift"
           @lower="onManualLower"
+          @prelift="onManualPrelift"
+          @linkChanged="onLinkChanged"
         />
+        <UpstreamCatchmentManager ref="upstreamMgrRef" @select="onCatchmentSelect" />
         <AlarmLog :underpasses="underpasses" />
       </aside>
     </div>
@@ -46,11 +49,13 @@ import { useWebSocket } from './composables/useWebSocket.js'
 import UnderpassList from './components/UnderpassList.vue'
 import CanvasMap from './components/CanvasMap.vue'
 import DetailPanel from './components/DetailPanel.vue'
+import UpstreamCatchmentManager from './components/UpstreamCatchmentManager.vue'
 import AlarmLog from './components/AlarmLog.vue'
 
 const underpasses = ref([])
 const selectedId = ref(null)
 const currentTime = ref('')
+const upstreamMgrRef = ref(null)
 
 const { latestUpdates } = useWebSocket()
 
@@ -88,6 +93,21 @@ async function onManualLift(underpassId) {
 
 async function onManualLower(underpassId) {
   await sendHydraulicCommand(underpassId, 'lower', 0)
+}
+
+async function onManualPrelift(underpassId) {
+  await sendHydraulicCommand(underpassId, 'prelift', 5)
+}
+
+async function onLinkChanged() {
+  await loadData()
+  if (upstreamMgrRef.value) {
+    await upstreamMgrRef.value.loadList()
+  }
+}
+
+function onCatchmentSelect(catchment) {
+  console.log('Selected catchment:', catchment)
 }
 
 let timer = null

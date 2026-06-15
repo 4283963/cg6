@@ -32,8 +32,9 @@ function draw(ctx, w, h, time) {
   for (const pos of UNDERPASS_POSITIONS) {
     const up = props.underpasses.find(u => u.underpassId === pos.id)
     const isAlarm = up && up.status === 'ALARM'
+    const isForecast = up && up.status !== 'ALARM' && up.forecastActive
     const isSelected = pos.id === props.selectedId
-    drawUnderpassNode(ctx, w, h, pos, up, isAlarm, isSelected, time)
+    drawUnderpassNode(ctx, w, h, pos, up, isAlarm, isForecast, isSelected, time)
   }
 }
 
@@ -84,25 +85,27 @@ function drawRoads(ctx, w, h) {
   }
 }
 
-function drawUnderpassNode(ctx, w, h, pos, data, isAlarm, isSelected, time) {
+function drawUnderpassNode(ctx, w, h, pos, data, isAlarm, isForecast, isSelected, time) {
   const cx = pos.x * w
   const cy = pos.y * h
   const baseR = 28
 
-  if (isAlarm) {
-    const pulse = Math.sin(time * 0.004) * 0.5 + 0.5
+  if (isAlarm || isForecast) {
+    const color = isAlarm ? '245, 63, 63' : '255, 125, 0'
+    const pulseSpeed = isAlarm ? 0.004 : 0.003
+    const pulse = Math.sin(time * pulseSpeed) * 0.5 + 0.5
     const glowR = baseR + 20 + pulse * 15
     const grad = ctx.createRadialGradient(cx, cy, baseR, cx, cy, glowR)
-    grad.addColorStop(0, 'rgba(245, 63, 63, 0.6)')
-    grad.addColorStop(0.5, 'rgba(245, 63, 63, 0.2)')
-    grad.addColorStop(1, 'rgba(245, 63, 63, 0)')
+    grad.addColorStop(0, `rgba(${color}, 0.6)`)
+    grad.addColorStop(0.5, `rgba(${color}, 0.2)`)
+    grad.addColorStop(1, `rgba(${color}, 0)`)
     ctx.fillStyle = grad
     ctx.beginPath()
     ctx.arc(cx, cy, glowR, 0, Math.PI * 2)
     ctx.fill()
 
     const ringR = baseR + 8 + pulse * 8
-    ctx.strokeStyle = `rgba(245, 63, 63, ${0.3 + pulse * 0.5})`
+    ctx.strokeStyle = `rgba(${color}, ${0.3 + pulse * 0.5})`
     ctx.lineWidth = 2
     ctx.beginPath()
     ctx.arc(cx, cy, ringR, 0, Math.PI * 2)
@@ -122,16 +125,19 @@ function drawUnderpassNode(ctx, w, h, pos, data, isAlarm, isSelected, time) {
   if (isAlarm) {
     const pulse = Math.sin(time * 0.005) * 0.3 + 0.7
     ctx.fillStyle = `rgba(245, 63, 63, ${pulse})`
+  } else if (isForecast) {
+    const pulse = Math.sin(time * 0.004) * 0.3 + 0.7
+    ctx.fillStyle = `rgba(255, 125, 0, ${pulse})`
   } else {
     ctx.fillStyle = '#1a3050'
   }
   ctx.fill()
-  ctx.strokeStyle = isAlarm ? '#f53f3f' : '#409eff'
+  ctx.strokeStyle = isAlarm ? '#f53f3f' : (isForecast ? '#ff7d00' : '#409eff')
   ctx.lineWidth = 2
   ctx.stroke()
 
   const depth = data ? (data.currentDepthMm || 0) : 0
-  ctx.fillStyle = isAlarm ? '#fff' : '#e0e8f0'
+  ctx.fillStyle = (isAlarm || isForecast) ? '#fff' : '#e0e8f0'
   ctx.font = 'bold 14px "Roboto Mono", monospace'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
@@ -149,6 +155,10 @@ function drawUnderpassNode(ctx, w, h, pos, data, isAlarm, isSelected, time) {
     ctx.fillStyle = '#f53f3f'
     ctx.font = 'bold 11px "Microsoft YaHei", sans-serif'
     ctx.fillText('积水危险', cx, cy + baseR + 32)
+  } else if (isForecast) {
+    ctx.fillStyle = '#ff7d00'
+    ctx.font = 'bold 11px "Microsoft YaHei", sans-serif'
+    ctx.fillText('前瞻预警', cx, cy + baseR + 32)
   }
 }
 

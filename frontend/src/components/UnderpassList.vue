@@ -7,12 +7,13 @@
       class="list-item"
       :class="{
         selected: u.underpassId === selectedId,
-        alarm: u.status === 'ALARM'
+        alarm: u.status === 'ALARM',
+        forecast: u.status !== 'ALARM' && u.forecastActive
       }"
       @click="$emit('select', u.underpassId)"
     >
       <div class="item-header">
-        <span class="dot" :class="u.status === 'ALARM' ? 'dot-alarm' : 'dot-normal'"></span>
+        <span class="dot" :class="dotClass(u)"></span>
         <span class="name">{{ u.name || u.underpassId }}</span>
       </div>
       <div class="item-depth">
@@ -22,7 +23,7 @@
         <span class="depth-unit">mm</span>
       </div>
       <div class="item-status">
-        {{ u.status === 'ALARM' ? '⚠ 告警' : '● 正常' }}
+        {{ getStatusText(u) }}
       </div>
     </div>
   </div>
@@ -34,6 +35,18 @@ defineProps({
   selectedId: { type: String, default: null }
 })
 defineEmits(['select'])
+
+function dotClass(u) {
+  if (u.status === 'ALARM') return 'dot-alarm'
+  if (u.forecastActive) return 'dot-forecast'
+  return 'dot-normal'
+}
+
+function getStatusText(u) {
+  if (u.status === 'ALARM') return '⚠ 告警'
+  if (u.forecastActive) return '🔮 前瞻预警'
+  return '● 正常'
+}
 </script>
 
 <style scoped>
@@ -80,6 +93,16 @@ defineEmits(['select'])
   50% { background: rgba(245, 63, 63, 0.15); }
 }
 
+.list-item.forecast {
+  border-color: rgba(255, 125, 0, 0.5);
+  animation: item-forecast-pulse 2s infinite;
+}
+
+@keyframes item-forecast-pulse {
+  0%, 100% { background: rgba(255, 125, 0, 0.05); }
+  50% { background: rgba(255, 125, 0, 0.15); }
+}
+
 .item-header {
   display: flex;
   align-items: center;
@@ -95,10 +118,16 @@ defineEmits(['select'])
 
 .dot-normal { background: #00b42a; }
 .dot-alarm { background: #f53f3f; animation: dot-blink 0.8s infinite; }
+.dot-forecast { background: #ff7d00; animation: dot-forecast-blink 1.2s infinite; }
 
 @keyframes dot-blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
+}
+
+@keyframes dot-forecast-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 .name {

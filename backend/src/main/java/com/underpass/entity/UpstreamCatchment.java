@@ -6,8 +6,8 @@ import java.time.LocalDateTime;
 
 @Data
 @Entity
-@Table(name = "underpass_info")
-public class UnderpassInfo {
+@Table(name = "upstream_catchment")
+public class UpstreamCatchment {
 
     @Id
     @Column(length = 32)
@@ -16,30 +16,20 @@ public class UnderpassInfo {
     @Column(nullable = false, length = 64)
     private String name;
 
+    @Column(nullable = false, length = 64)
+    private String flowMeterId;
+
+    @Column(length = 32)
+    private String rainSensorId;
+
     @Column(nullable = false)
     private Double longitude;
 
     @Column(nullable = false)
     private Double latitude;
 
-    @Column(nullable = false)
-    private Integer manholeCount;
-
-    @Column(length = 32)
-    private String ledId;
-
-    @Column(length = 32)
-    private String upstreamCatchmentId;
-
-    @Column(length = 16)
-    private String status = "NORMAL";
-
-    @Column(length = 16)
-    private String hydraulicState = "LOWERED";
-
-    private LocalDateTime lastAlarmTime;
-
-    private LocalDateTime lastForecastTime;
+    @Column(length = 128)
+    private String description;
 
     private LocalDateTime createTime;
 

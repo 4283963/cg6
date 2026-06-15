@@ -3,6 +3,7 @@ package com.underpass.service;
 import com.underpass.dto.SensorDataDTO;
 import com.underpass.dto.UnderpassStatusVO;
 import com.underpass.entity.WaterDepthRecord;
+import com.underpass.repository.UpstreamCatchmentRepository;
 import com.underpass.repository.WaterDepthRecordRepository;
 import com.underpass.repository.UnderpassInfoRepository;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +24,9 @@ public class WaterDepthService {
 
     private final WaterDepthRecordRepository depthRepo;
     private final UnderpassInfoRepository underpassRepo;
+    private final UpstreamCatchmentRepository catchmentRepo;
     private final FloodTriggerEngine triggerEngine;
+    private final ForecastTriggerEngine forecastEngine;
     private final DepthFilterService depthFilterService;
     private final SimpMessagingTemplate wsTemplate;
 
@@ -69,6 +72,18 @@ public class WaterDepthService {
             vo.setLongitude(info.getLongitude());
             vo.setLatitude(info.getLatitude());
             vo.setStatus(info.getStatus());
+            vo.setHydraulicState(info.getHydraulicState());
+            vo.setHydraulicLifted(!"LOWERED".equals(info.getHydraulicState()));
+            vo.setLedAlarmActive("ALARM".equals(info.getStatus()));
+            vo.setUpstreamCatchmentId(info.getUpstreamCatchmentId());
+            if (info.getUpstreamCatchmentId() != null) {
+                catchmentRepo.findById(info.getUpstreamCatchmentId())
+                        .ifPresent(c -> vo.setUpstreamCatchmentName(c.getName()));
+            }
+            vo.setForecastActive(forecastEngine.isForecastTriggered(underpassId));
+            vo.setLastFlowRateLps(forecastEngine.getCurrentFlow(info.getUpstreamCatchmentId()));
+            vo.setFlowRate10MinAgoLps(forecastEngine.getFlow10MinAgo(info.getUpstreamCatchmentId()));
+            vo.setCurrentlyRaining(forecastEngine.isRaining(underpassId));
         });
 
         Double smoothed = latestSmoothedDepthMap.get(underpassId);

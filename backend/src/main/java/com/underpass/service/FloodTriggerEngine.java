@@ -32,11 +32,10 @@ public class FloodTriggerEngine {
     private final HydraulicActionLogRepository hydraulicLogRepo;
     private final LedControlLogRepository ledLogRepo;
     private final DepthFilterService depthFilterService;
+    private final ForecastTriggerEngine forecastEngine;
 
     private final Set<String> alarmedUnderpasses = ConcurrentHashMap.newKeySet();
-
     private final Map<String, LocalDateTime> lastStateChangeTime = new ConcurrentHashMap<>();
-
     private final Map<String, Integer> aboveThresholdCount = new ConcurrentHashMap<>();
     private final Map<String, Integer> belowThresholdCount = new ConcurrentHashMap<>();
 
@@ -89,32 +88,31 @@ public class FloodTriggerEngine {
     private void triggerAlarm(String underpassId, double depthMm) {
         alarmedUnderpasses.add(underpassId);
         lastStateChangeTime.put(underpassId, LocalDateTime.now());
+        forecastEngine.clearForecast(underpassId);
 
-        updateUnderpassStatus(underpassId, "ALARM");
+        updateUnderpassStatus(underpassId, "ALARM", "FULL_LIFTED");
 
-        sendHydraulicLiftCommand(underpassId);
-
+        sendHydraulicFullLiftCommand(underpassId);
         sendLedAlarmCommand(underpassId);
-
         logHydraulicAction(underpassId, "lift", floodProps.getLiftHeightCm(), "dispatched");
     }
 
     private void clearAlarm(String underpassId) {
         alarmedUnderpasses.remove(underpassId);
         lastStateChangeTime.put(underpassId, LocalDateTime.now());
+        forecastEngine.clearForecast(underpassId);
 
-        updateUnderpassStatus(underpassId, "NORMAL");
+        updateUnderpassStatus(underpassId, "NORMAL", "LOWERED");
 
         sendHydraulicLowerCommand(underpassId);
-
         sendLedNormalCommand(underpassId);
-
         logHydraulicAction(underpassId, "lower", 0, "dispatched");
     }
 
-    private void updateUnderpassStatus(String underpassId, String status) {
+    private void updateUnderpassStatus(String underpassId, String status, String hydraulicState) {
         underpassRepo.findById(underpassId).ifPresent(info -> {
             info.setStatus(status);
+            info.setHydraulicState(hydraulicState);
             if ("ALARM".equals(status)) {
                 info.setLastAlarmTime(LocalDateTime.now());
             }
@@ -122,14 +120,15 @@ public class FloodTriggerEngine {
         });
     }
 
-    private void sendHydraulicLiftCommand(String underpassId) {
+    private void sendHydraulicFullLiftCommand(String underpassId) {
         HydraulicCommandDTO cmd = new HydraulicCommandDTO();
         cmd.setUnderpassId(underpassId);
         cmd.setAction("lift");
         cmd.setHeightCm(floodProps.getLiftHeightCm());
         String topic = "underpass/command/" + underpassId + "/hydraulic";
         mqttPublisher.publish(topic, cmd);
-        log.info("Dispatched hydraulic LIFT command to underpass {}", underpassId);
+        log.info("Dispatched hydraulic FULL-LIFT {}cm command to underpass {}",
+                floodProps.getLiftHeightCm(), underpassId);
     }
 
     private void sendHydraulicLowerCommand(String underpassId) {

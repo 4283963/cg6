@@ -22,6 +22,8 @@ mqtt:
   password: ""
   topic:
     sensor-data: underpass/sensor/data
+    flow-data: underpass/upstream/flow
+    rainfall-data: underpass/sensor/rainfall
     command-prefix: underpass/command
     hydraulic-status: underpass/status/hydraulic
 
@@ -30,6 +32,12 @@ flood:
   lift-height-cm: 15
   confirm-rounds: 3
   cooldown-seconds: 60
+  forecast:
+    pre-lift-height-cm: 5
+    flow-surge-ratio: 3.0
+    flow-window-minutes: 10
+    forecast-cooldown-minutes: 30
+    min-rain-mm-per-hour: 0.5
 
 led:
   api-url: http://road-admin.example.com/api/v1/led/control

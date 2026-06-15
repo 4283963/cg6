@@ -17,6 +17,8 @@ public class MqttProperties {
     @Data
     public static class Topic {
         private String sensorData;
+        private String flowData;
+        private String rainfallData;
         private String commandPrefix;
         private String hydraulicStatus;
     }

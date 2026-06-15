@@ -32,35 +32,81 @@
         >⚠ 毛刺</span>
       </div>
 
-      <div class="info-label">状态</div>
-      <div class="info-value">
-        <span class="status-badge" :class="underpass.status === 'ALARM' ? 'badge-alarm' : 'badge-normal'">
-          {{ underpass.status === 'ALARM' ? '告警' : '正常' }}
-        </span>
-      </div>
-
       <div class="info-label">液压井盖</div>
       <div class="info-value">
-        {{ underpass.hydraulicLifted ? '已顶升 15cm' : '已降下' }}
+        <span class="hydraulic-state" :class="hydraulicStateClass">
+          {{ hydraulicStateText }}
+        </span>
       </div>
 
       <div class="info-label">LED警示灯</div>
       <div class="info-value">
-        {{ underpass.ledAlarmActive ? '红色告警' : '绿色正常' }}
+        <span v-if="underpass.status === 'ALARM'" class="led-state led-alarm">红色 · 积水危险</span>
+        <span v-else-if="underpass.forecastActive" class="led-state led-forecast">黄色 · 预备排水</span>
+        <span v-else class="led-state led-normal">绿色 · 正常通行</span>
       </div>
 
-      <div class="info-label">坐标</div>
-      <div class="info-value small">
-        {{ (underpass.longitude || 0).toFixed(4) }}, {{ (underpass.latitude || 0).toFixed(4) }}
+      <div class="info-label">天气</div>
+      <div class="info-value">
+        <span v-if="underpass.currentlyRaining" class="weather rain">🌧 下雨</span>
+        <span v-else-if="underpass.currentlyRaining === false" class="weather clear">☀ 晴</span>
+        <span v-else class="weather unknown">— 未采集</span>
+      </div>
+
+      <div class="info-label">状态</div>
+      <div class="info-value">
+        <span class="status-badge" :class="statusClass">
+          {{ statusText }}
+        </span>
       </div>
     </div>
 
+    <div class="forecast-section" v-if="underpass.upstreamCatchmentId">
+      <div class="section-title">
+        <span>🔮 上游雨情前瞻</span>
+        <span v-if="underpass.forecastActive" class="forecast-tag">已触发</span>
+      </div>
+      <div class="forecast-info">
+        <div class="forecast-row">
+          <span>关联汇水区</span>
+          <span class="forecast-val">{{ underpass.upstreamCatchmentName || underpass.upstreamCatchmentId }}</span>
+        </div>
+        <div class="forecast-row">
+          <span>当前流量</span>
+          <span class="forecast-val">{{ (underpass.lastFlowRateLps || 0).toFixed(1) }} L/s</span>
+        </div>
+        <div class="forecast-row">
+          <span>10分钟前</span>
+          <span class="forecast-val">{{ (underpass.flowRate10MinAgoLps || 0).toFixed(1) }} L/s</span>
+        </div>
+        <div class="forecast-row">
+          <span>流量倍数</span>
+          <span class="forecast-val" :class="{ danger: surgeRatio >= 3 }">
+            {{ surgeRatio.toFixed(2) }}x
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="link-section">
+      <div class="section-title">🔗 关联上游汇水区</div>
+      <select v-model="selectedUpstreamId" @change="onLinkChange" class="link-select">
+        <option value="">— 不关联 —</option>
+        <option v-for="c in catchments" :key="c.id" :value="c.id">
+          {{ c.name }} ({{ c.id }})
+        </option>
+      </select>
+    </div>
+
     <div class="panel-actions">
+      <button class="btn btn-prelift" @click="$emit('prelift', underpass.underpassId)">
+        ⬆ 半顶升5cm
+      </button>
       <button class="btn btn-lift" @click="$emit('lift', underpass.underpassId)">
-        ⬆ 手动顶升
+        ⬆ 全顶升15cm
       </button>
       <button class="btn btn-lower" @click="$emit('lower', underpass.underpassId)">
-        ⬇ 手动降下
+        ⬇ 降下
       </button>
     </div>
   </div>
@@ -72,10 +118,70 @@
 </template>
 
 <script setup>
-defineProps({
+import { ref, computed, watch, onMounted } from 'vue'
+import { fetchUpstreamList, linkUpstreamCatchment } from '../api/underpass.js'
+
+const props = defineProps({
   underpass: { type: Object, default: null }
 })
-defineEmits(['lift', 'lower'])
+const emit = defineEmits(['lift', 'lower', 'prelift', 'linkChanged'])
+
+const catchments = ref([])
+const selectedUpstreamId = ref('')
+
+async function loadCatchments() {
+  catchments.value = await fetchUpstreamList()
+}
+
+watch(() => props.underpass?.upstreamCatchmentId, (newVal) => {
+  selectedUpstreamId.value = newVal || ''
+}, { immediate: true })
+
+async function onLinkChange() {
+  if (!props.underpass) return
+  try {
+    await linkUpstreamCatchment(props.underpass.underpassId, selectedUpstreamId.value)
+    emit('linkChanged')
+  } catch (e) {
+    alert('关联失败：' + e.message)
+  }
+}
+
+const surgeRatio = computed(() => {
+  const last = props.underpass?.lastFlowRateLps || 0
+  const ago = props.underpass?.flowRate10MinAgoLps || 0
+  if (ago <= 0) return 0
+  return last / ago
+})
+
+const hydraulicStateText = computed(() => {
+  const s = props.underpass?.hydraulicState
+  if (s === 'PRE_LIFTED') return '已半顶升 5cm'
+  if (s === 'FULL_LIFTED') return '已全顶升 15cm'
+  return '已降下'
+})
+
+const hydraulicStateClass = computed(() => {
+  const s = props.underpass?.hydraulicState
+  if (s === 'PRE_LIFTED') return 'state-pre'
+  if (s === 'FULL_LIFTED') return 'state-full'
+  return 'state-down'
+})
+
+const statusText = computed(() => {
+  if (props.underpass?.status === 'ALARM') return '告警'
+  if (props.underpass?.forecastActive) return '前瞻预警'
+  return '正常'
+})
+
+const statusClass = computed(() => {
+  if (props.underpass?.status === 'ALARM') return 'badge-alarm'
+  if (props.underpass?.forecastActive) return 'badge-forecast'
+  return 'badge-normal'
+})
+
+onMounted(loadCatchments)
+defineExpose({ loadCatchments })
 </script>
 
 <style scoped>
@@ -108,11 +214,6 @@ defineEmits(['lift', 'lower'])
 .info-value {
   font-size: 13px;
   color: #e0e8f0;
-}
-
-.info-value.small {
-  font-size: 11px;
-  color: #86909c;
 }
 
 .info-value.depth {
@@ -185,6 +286,53 @@ defineEmits(['lift', 'lower'])
   background: #f53f3f;
 }
 
+.hydraulic-state {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.state-down {
+  background: rgba(0, 180, 42, 0.15);
+  color: #00b42a;
+  border: 1px solid rgba(0, 180, 42, 0.3);
+}
+
+.state-pre {
+  background: rgba(255, 125, 0, 0.15);
+  color: #ff7d00;
+  border: 1px solid rgba(255, 125, 0, 0.3);
+}
+
+.state-full {
+  background: rgba(245, 63, 63, 0.15);
+  color: #f53f3f;
+  border: 1px solid rgba(245, 63, 63, 0.3);
+}
+
+.led-state {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.led-normal { color: #00b42a; }
+.led-alarm { color: #f53f3f; animation: blink 0.8s infinite; }
+.led-forecast { color: #ff7d00; animation: blink 1.5s infinite; }
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.weather {
+  font-size: 12px;
+}
+.weather.rain { color: #409eff; }
+.weather.clear { color: #ffd21e; }
+.weather.unknown { color: #5a6a7a; }
+
 .status-badge {
   display: inline-block;
   padding: 2px 10px;
@@ -206,25 +354,110 @@ defineEmits(['lift', 'lower'])
   animation: badge-blink 1s infinite;
 }
 
+.badge-forecast {
+  background: rgba(255, 125, 0, 0.15);
+  color: #ff7d00;
+  border: 1px solid rgba(255, 125, 0, 0.3);
+  animation: badge-blink 1.5s infinite;
+}
+
 @keyframes badge-blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
 
+.section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e0e8f0;
+  margin: 12px 0 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.forecast-tag {
+  background: rgba(255, 125, 0, 0.2);
+  color: #ff7d00;
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 4px;
+  animation: tag-blink 1.2s infinite;
+}
+
+@keyframes tag-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.forecast-info {
+  background: #0f1f35;
+  border: 1px solid rgba(255, 125, 0, 0.2);
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.forecast-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 12px;
+  border-bottom: 1px solid rgba(64, 158, 255, 0.05);
+}
+
+.forecast-row:last-child { border-bottom: none; }
+
+.forecast-row > span:first-child {
+  color: #86909c;
+}
+
+.forecast-val {
+  color: #e0e8f0;
+  font-family: "Roboto Mono", monospace;
+}
+
+.forecast-val.danger {
+  color: #f53f3f;
+  font-weight: 600;
+}
+
+.link-select {
+  width: 100%;
+  background: #0a1628;
+  border: 1px solid rgba(64, 158, 255, 0.3);
+  border-radius: 4px;
+  padding: 6px 10px;
+  color: #e0e8f0;
+  font-size: 12px;
+}
+
 .panel-actions {
   display: flex;
-  gap: 10px;
+  gap: 6px;
+  margin-top: 14px;
+  flex-wrap: wrap;
 }
 
 .btn {
   flex: 1;
-  padding: 8px 0;
+  min-width: 80px;
+  padding: 7px 0;
   border: none;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
+}
+
+.btn-prelift {
+  background: rgba(255, 125, 0, 0.15);
+  color: #ff7d00;
+  border: 1px solid rgba(255, 125, 0, 0.3);
+}
+
+.btn-prelift:hover {
+  background: rgba(255, 125, 0, 0.25);
 }
 
 .btn-lift {
